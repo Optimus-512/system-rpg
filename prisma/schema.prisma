@@ -1,0 +1,131 @@
+// ─────────────────────────────────────────────────────────────────────
+//  THE SYSTEM · Database Schema
+//  "Arise." — Every hunter's data is forged here.
+// ─────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── USERS ────────────────────────────────────────────────────────────
+model User {
+  id           String @id @default(cuid())
+  email        String @unique
+  username     String @unique
+  passwordHash String
+
+  // Character sheet
+  level      Int    @default(1)
+  xp         Int    @default(0) // XP *within* the current level
+  gold       Int    @default(150)
+  rank       String @default("E") // E, D, C, B, A, S, NATIONAL
+  title      String @default("Awakened Nobody")
+  // Attributes — real tasks raise these:
+  intellect  Int    @default(1)
+  strength   Int    @default(1)
+  discipline Int    @default(1)
+  bond       Int    @default(1) // social connection (family & friends)
+
+  // Streaks
+  currentStreak   Int     @default(0)
+  longestStreak   Int     @default(0)
+  lastStreakDate  String? // ISO date "YYYY-MM-DD" of last qualifying day
+  questsDoneToday Int     @default(0)
+  lastQuestDate   String? // ISO date of last completed quest
+
+  createdAt DateTime @default(now())
+
+  tasks             Task[]
+  inventory         InventoryItem[]
+  gateRuns          GateRun[]
+  friendships       Friendship[]    @relation("friendships") // initiated by this user
+  friendOf          Friendship[]    @relation("friendOf") // targeting this user
+  challengerBattles Battle[]        @relation("challengerBattles")
+  defenderBattles   Battle[]        @relation("defenderBattles")
+  wins              Int             @default(0)
+  losses            Int             @default(0)
+
+  @@index([xp])
+  @@index([level])
+}
+
+// ── TASKS (called "Quests" in the UI) ────────────────────────────────
+model Task {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  note        String?
+  attribute   String // INTELLECT | STRENGTH | DISCIPLINE | BOND
+  difficulty  String    @default("NORMAL") // EASY | NORMAL | HARD | BOSS
+  xp          Int // computed on the server
+  gold        Int // computed on the server
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, completed])
+  @@index([userId, createdAt])
+}
+
+// ── ITEMS (catalog is static code; inventory is per user) ────────────
+model InventoryItem {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId     String // key from src/lib/items.ts catalog, e.g. "spear_of_strength"
+  equipped   Boolean   @default(false)
+  durability Int       @default(100) // 0 = consumed/broken
+  acquiredAt DateTime  @default(now())
+  expiresAt  DateTime? // temporary weapons granted by quests
+
+  @@unique([userId, itemId])
+  @@index([userId])
+}
+
+// ── GATES (bosses — manifestations of a sedentary life) ──────────────
+model GateRun {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gateId    String // key from src/lib/gates.ts, e.g. "weakening_willow"
+  victory   Boolean
+  dealt     Int      @default(0) // damage dealt this run
+  createdAt DateTime @default(now())
+
+  @@index([userId, gateId])
+}
+
+// ── FRIENDS ──────────────────────────────────────────────────────────
+model Friendship {
+  id        String   @id @default(cuid())
+  fromId    String
+  from      User     @relation("friendships", fields: [fromId], references: [id], onDelete: Cascade)
+  toId      String
+  to        User     @relation("friendOf", fields: [toId], references: [id], onDelete: Cascade)
+  status    String   @default("PENDING") // PENDING | ACCEPTED
+  createdAt DateTime @default(now())
+
+  @@unique([fromId, toId])
+  @@index([toId])
+}
+
+// ── PVP BATTLES (friendly duels between hunters) ─────────────────────
+model Battle {
+  id           String   @id @default(cuid())
+  challengerId String
+  challenger   User     @relation("challengerBattles", fields: [challengerId], references: [id], onDelete: Cascade)
+  defenderId   String
+  defender     User     @relation("defenderBattles", fields: [defenderId], references: [id], onDelete: Cascade)
+  winnerId     String?
+  log          String   @default("[]") // JSON array of battle events
+  createdAt    DateTime @default(now())
+
+  @@index([challengerId])
+  @@index([defenderId])
+}
