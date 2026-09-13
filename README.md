@@ -1,4 +1,4 @@
-# ⚔ THE SYSTEM — Life RPG
+@ ⚔ THE SYSTEM — Life RPG
 
 > *"You have acquired the qualifications to be a Player. Will you accept?"*
 
